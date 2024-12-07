@@ -1,4 +1,9 @@
 use starknet::ContractAddress;
+use starknet::get_caller_address;
+use starknet::storage::{Map, StorageMapReadAccess, StorageMapWriteAccess};
+use starknet::Event;
+use starknet::Span;
+use starknet::felt252;
 
 #[starknet::interface]
 pub trait ERC721ABI<TContractState> {
@@ -12,7 +17,7 @@ pub trait ERC721ABI<TContractState> {
         from: ContractAddress,
         to: ContractAddress,
         token_id: u256,
-        data: Span<felt252>
+        data: Span<felt252>,
     );
     fn transfer_from(
         ref self: TContractState, from: ContractAddress, to: ContractAddress, token_id: u256
@@ -30,6 +35,7 @@ pub mod ERC721 {
     use starknet::ContractAddress;
     use starknet::get_caller_address;
     use starknet::storage::{Map, StorageMapReadAccess, StorageMapWriteAccess};
+    use starknet::Event;
 
     #[storage]
     pub struct Storage {
@@ -39,7 +45,7 @@ pub mod ERC721 {
         _balances: Map<ContractAddress, u256>,
         _token_approvals: Map<u256, ContractAddress>,
         _operator_approvals: Map<(ContractAddress, ContractAddress), bool>,
-        _base_uri: ByteArray
+        _base_uri: ByteArray,
     }
 
     #[event]
@@ -58,7 +64,7 @@ pub mod ERC721 {
         #[key]
         pub to: ContractAddress,
         #[key]
-        pub token_id: u256
+        pub token_id: u256,
     }
 
     /// Emitted when `owner` enables `approved` to manage the `token_id` token.
@@ -69,7 +75,7 @@ pub mod ERC721 {
         #[key]
         pub approved: ContractAddress,
         #[key]
-        pub token_id: u256
+        pub token_id: u256,
     }
 
     /// Emitted when `owner` enables or disables (`approved`) `operator` to manage
@@ -80,7 +86,7 @@ pub mod ERC721 {
         pub owner: ContractAddress,
         #[key]
         pub operator: ContractAddress,
-        pub approved: bool
+        pub approved: bool,
     }
 
     #[abi(embed_v0)]
@@ -94,7 +100,7 @@ pub mod ERC721 {
         }
 
         fn token_uri(self: @ContractState, token_id: u256) -> ByteArray {
-            self._base_uri.read() // You may append the token_id to create dynamic URIs
+            self._base_uri.read() 
         }
 
         fn balance_of(self: @ContractState, account: ContractAddress) -> u256 {
@@ -121,12 +127,12 @@ pub mod ERC721 {
             self._balances.write(from, self._balances.read(from) - 1);
             self._balances.write(to, self._balances.read(to) + 1);
 
-            self
-                .emit(
-                    Event::Transfer(
-                        Transfer { from: ContractAddress, to: ContractAddress, token_id: u256 }
-                    )
-                )
+            // Emit Transfer event
+            self.emit(Event::Transfer(Transfer {
+                from: from,
+                to: to,
+                token_id: token_id,
+            }));
         }
 
         fn safe_transfer_from(
@@ -151,7 +157,11 @@ pub mod ERC721 {
             self._token_approvals.write(token_id, to);
 
             // Emit Approval event
-            Approval { owner, approved: to, token_id }.emit();
+            self.emit(Event::Approval(Approval {
+                owner: owner,
+                approved: to,
+                token_id: token_id,
+            }));
         }
 
         fn set_approval_for_all(
@@ -160,8 +170,11 @@ pub mod ERC721 {
             let owner = get_caller_address();
             self._operator_approvals.write((owner, operator), approved);
 
-            // Emit ApprovalForAll event
-            ApprovalForAll { owner, operator, approved }.emit();
+            self.emit(Event::ApprovalForAll(ApprovalForAll {
+                owner: owner,
+                operator: operator,
+                approved: approved,
+            }));
         }
 
         fn get_approved(self: @ContractState, token_id: u256) -> ContractAddress {
